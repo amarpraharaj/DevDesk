@@ -2,9 +2,11 @@ import express from "express";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import healthRouter from "./routes/health.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
+import cookieParser from "cookie-parser";
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 
 app.use("/api", healthRouter);
 

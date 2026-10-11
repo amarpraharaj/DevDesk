@@ -1,4 +1,4 @@
-
+import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import User from "../users/user.model.js";
 
@@ -73,9 +73,26 @@ export const login = async (req, res, next) => {
             });
         }
 
+        const token = jwt.sign(
+            { sub: user._id.toString() },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: "1h",
+                algorithm: "HS256",
+            }
+        );
+
+        res.cookie("accessToken", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 60 * 60 * 1000,
+            path: "/",
+        });
+
         return res.status(200).json({
             success: true,
-            message: "Credentials verified successfully.",
+            message: "Login successful.",
             data: {
                 user: {
                     id: user._id,
