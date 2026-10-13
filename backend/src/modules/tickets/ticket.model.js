@@ -29,6 +29,14 @@ const ticketSchema = new mongoose.Schema(
             enum: ["open", "in-progress", "resolved", "closed"],
             default: "open",
         },
+        
+        createdBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: [true, "Ticket creator is required."],
+            index: true,
+        },
+
     },
     {
         timestamps: true,
