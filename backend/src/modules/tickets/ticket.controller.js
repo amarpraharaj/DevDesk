@@ -113,3 +113,36 @@ export const updateTicket = async (req, res, next) => {
         return next(error);
     }
 };
+
+
+export const deleteTicket = async (req, res, next) => {
+  try {
+    const { ticketId } = req.params;
+
+    if (!mongoose.isValidObjectId(ticketId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket ID.",
+      });
+    }
+
+    const ticket = await Ticket.findOneAndDelete({
+      _id: ticketId,
+      createdBy: req.user._id,
+    });
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: "Ticket not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Ticket deleted successfully.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+};

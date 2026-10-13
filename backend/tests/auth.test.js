@@ -648,3 +648,138 @@ test("PUT /api/tickets/:ticketId prevents another user from updating a ticket", 
 });
 
 
+
+test("DELETE /api/tickets/:ticketId deletes the authenticated user's ticket", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Ticket Delete User",
+    email: "ticket-delete-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  const createResponse = await agent
+    .post("/api/tickets")
+    .send({
+      title: "Ticket to delete",
+      description: "This ticket will be deleted by its creator.",
+      priority: "medium",
+    });
+
+  assert.equal(createResponse.status, 201);
+
+  const ticketId = createResponse.body.data.ticket.id;
+
+  // Confirm that the ticket exists before deletion.
+  assert.ok(await Ticket.findById(ticketId));
+
+  const deleteResponse = await agent.delete(
+    `/api/tickets/${ticketId}`
+  );
+
+  assert.equal(deleteResponse.status, 200);
+  assert.equal(deleteResponse.body.success, true);
+  assert.equal(
+    deleteResponse.body.message,
+    "Ticket deleted successfully."
+  );
+
+  // Confirm that MongoDB no longer contains the ticket.
+  const deletedTicket = await Ticket.findById(ticketId);
+
+  assert.equal(deletedTicket, null);
+});
+
+
+test("DELETE /api/tickets/:ticketId prevents another user from deleting a ticket", async () => {
+  const agentA = request.agent(app);
+  const agentB = request.agent(app);
+
+  const userA = {
+    name: "Delete Owner A",
+    email: "delete-owner-a@example.com",
+    password: "DevDesk@123",
+  };
+
+  const userB = {
+    name: "Delete Owner B",
+    email: "delete-owner-b@example.com",
+    password: "DevDesk@123",
+  };
+
+  // Register and log in User A.
+  const registerA = await agentA
+    .post("/api/auth/register")
+    .send(userA);
+
+  assert.equal(registerA.status, 201);
+
+  const loginA = await agentA
+    .post("/api/auth/login")
+    .send({
+      email: userA.email,
+      password: userA.password,
+    });
+
+  assert.equal(loginA.status, 200);
+
+  // User A creates a ticket.
+  const createResponse = await agentA
+    .post("/api/tickets")
+    .send({
+      title: "User A protected ticket",
+      description: "Only User A owns this ticket.",
+      priority: "high",
+    });
+
+  assert.equal(createResponse.status, 201);
+
+  const ticketId = createResponse.body.data.ticket.id;
+
+  // Register and log in User B.
+  const registerB = await agentB
+    .post("/api/auth/register")
+    .send(userB);
+
+  assert.equal(registerB.status, 201);
+
+  const loginB = await agentB
+    .post("/api/auth/login")
+    .send({
+      email: userB.email,
+      password: userB.password,
+    });
+
+  assert.equal(loginB.status, 200);
+
+  // User B attempts to delete User A's ticket.
+  const deleteResponse = await agentB.delete(
+    `/api/tickets/${ticketId}`
+  );
+
+  assert.equal(deleteResponse.status, 404);
+  assert.equal(deleteResponse.body.success, false);
+  assert.equal(deleteResponse.body.message, "Ticket not found.");
+
+  // The ticket must still exist and remain unchanged.
+  const savedTicket = await Ticket.findById(ticketId);
+
+  assert.ok(savedTicket, "Another user must not delete this ticket.");
+  assert.equal(savedTicket.title, "User A protected ticket");
+  assert.equal(savedTicket.createdBy.toString(), loginA.body.data.user.id);
+});

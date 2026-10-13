@@ -3,6 +3,7 @@ import { Router } from "express";
 import authMiddleware from "../../middlewares/auth.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
 
+
 import {
   createTicketSchema,
   updateTicketSchema,
@@ -12,6 +13,7 @@ import {
   createTicket,
   listTickets,
   updateTicket,
+  deleteTicket,
 } from "./ticket.controller.js";
 
 
@@ -32,5 +34,8 @@ router.put(
   validate(updateTicketSchema),
   updateTicket
 );
+
+
+router.delete("/:ticketId", authMiddleware, deleteTicket);
 
 export default router;
