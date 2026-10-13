@@ -783,3 +783,332 @@ test("DELETE /api/tickets/:ticketId prevents another user from deleting a ticket
   assert.equal(savedTicket.title, "User A protected ticket");
   assert.equal(savedTicket.createdBy.toString(), loginA.body.data.user.id);
 });
+
+
+test("GET /api/tickets filters by status and priority", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Ticket Filter User",
+    email: "ticket-filter-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  // Create a high-priority open ticket.
+  const highOpenResponse = await agent
+    .post("/api/tickets")
+    .send({
+      title: "High priority open ticket",
+      description: "Needs attention.",
+      priority: "high",
+    });
+
+  assert.equal(highOpenResponse.status, 201);
+
+  // Create a low-priority open ticket.
+  const lowOpenResponse = await agent
+    .post("/api/tickets")
+    .send({
+      title: "Low priority open ticket",
+      description: "Can wait.",
+      priority: "low",
+    });
+
+  assert.equal(lowOpenResponse.status, 201);
+
+  // Create a high-priority ticket, then resolve it.
+  const resolvedResponse = await agent
+    .post("/api/tickets")
+    .send({
+      title: "Resolved high priority ticket",
+      description: "Already resolved.",
+      priority: "high",
+    });
+
+  assert.equal(resolvedResponse.status, 201);
+
+  const ticketId = resolvedResponse.body.data.ticket.id;
+
+  const updateResponse = await agent
+    .put(`/api/tickets/${ticketId}`)
+    .send({ status: "resolved" });
+
+  assert.equal(updateResponse.status, 200);
+
+  // Request tickets that are both open AND high priority.
+  const response = await agent.get(
+    "/api/tickets?status=open&priority=high"
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(response.body.data.tickets.length, 1);
+
+  assert.equal(
+    response.body.data.tickets[0].title,
+    "High priority open ticket"
+  );
+
+  assert.equal(response.body.data.tickets[0].status, "open");
+  assert.equal(response.body.data.tickets[0].priority, "high");
+
+  assert.equal(response.body.data.pagination.total, 1);
+});
+
+
+test("GET /api/tickets paginates results and returns correct metadata", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Pagination Test User",
+    email: "ticket-pagination-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  // Create three tickets.
+  for (let i = 1; i <= 3; i++) {
+    const createResponse = await agent
+      .post("/api/tickets")
+      .send({
+        title: `Pagination ticket ${i}`,
+        description: `Test ticket ${i}`,
+        priority: "medium",
+      });
+
+    assert.equal(createResponse.status, 201);
+  }
+
+  // Page 1: expect two tickets.
+  const pageOne = await agent.get("/api/tickets?page=1&limit=2");
+
+  assert.equal(pageOne.status, 200);
+  assert.equal(pageOne.body.data.tickets.length, 2);
+  assert.equal(pageOne.body.data.pagination.page, 1);
+  assert.equal(pageOne.body.data.pagination.limit, 2);
+  assert.equal(pageOne.body.data.pagination.total, 3);
+  assert.equal(pageOne.body.data.pagination.totalPages, 2);
+  assert.equal(pageOne.body.data.pagination.hasNextPage, true);
+  assert.equal(pageOne.body.data.pagination.hasPrevPage, false);
+
+  // Page 2: expect the remaining ticket.
+  const pageTwo = await agent.get("/api/tickets?page=2&limit=2");
+
+  assert.equal(pageTwo.status, 200);
+  assert.equal(pageTwo.body.data.tickets.length, 1);
+  assert.equal(pageTwo.body.data.pagination.page, 2);
+  assert.equal(pageTwo.body.data.pagination.total, 3);
+  assert.equal(pageTwo.body.data.pagination.hasNextPage, false);
+  assert.equal(pageTwo.body.data.pagination.hasPrevPage, true);
+
+  // The two pages must not contain duplicate tickets.
+  const pageOneIds = pageOne.body.data.tickets.map((ticket) => ticket.id);
+  const pageTwoIds = pageTwo.body.data.tickets.map((ticket) => ticket.id);
+
+  assert.equal(
+    pageOneIds.some((id) => pageTwoIds.includes(id)),
+    false
+  );
+});
+
+
+test("GET /api/tickets sorts tickets by title in ascending order", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Ticket Sort User",
+    email: "ticket-sort-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  const titles = [
+    "Zebra ticket",
+    "Apple ticket",
+    "Mango ticket",
+  ];
+
+  for (const title of titles) {
+    const createResponse = await agent
+      .post("/api/tickets")
+      .send({
+        title,
+        description: "Sorting test ticket",
+        priority: "medium",
+      });
+
+    assert.equal(createResponse.status, 201);
+  }
+
+  const response = await agent.get(
+    "/api/tickets?sortBy=title&sortOrder=asc"
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.tickets.length, 3);
+
+  const sortedTitles = response.body.data.tickets.map(
+    (ticket) => ticket.title
+  );
+
+  assert.deepEqual(sortedTitles, [
+    "Apple ticket",
+    "Mango ticket",
+    "Zebra ticket",
+  ]);
+});
+
+
+test("GET /api/tickets searches titles and descriptions case-insensitively", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Ticket Search User",
+    email: "ticket-search-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  const tickets = [
+    {
+      title: "LOGIN screen is broken",
+      description: "The button does not respond.",
+    },
+    {
+      title: "Checkout issue",
+      description: "The user cannot login during checkout.",
+    },
+    {
+      title: "Profile settings",
+      description: "The avatar cannot be changed.",
+    },
+  ];
+
+  for (const ticket of tickets) {
+    const response = await agent
+      .post("/api/tickets")
+      .send({
+        ...ticket,
+        priority: "medium",
+      });
+
+    assert.equal(response.status, 201);
+  }
+
+  // Search should match both title and description,
+  // without being case-sensitive.
+  const response = await agent.get("/api/tickets?search=login");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(response.body.data.tickets.length, 2);
+  assert.equal(response.body.data.pagination.total, 2);
+
+  const titles = response.body.data.tickets.map(
+    (ticket) => ticket.title
+  );
+
+  assert.ok(titles.includes("LOGIN screen is broken"));
+  assert.ok(titles.includes("Checkout issue"));
+  assert.equal(titles.includes("Profile settings"), false);
+});
+
+
+test("GET /api/tickets rejects invalid query parameters", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Invalid Query Test User",
+    email: "invalid-query-test@example.com",
+    password: "DevDesk@123",
+  };
+
+  const registerResponse = await agent
+    .post("/api/auth/register")
+    .send(user);
+
+  assert.equal(registerResponse.status, 201);
+
+  const loginResponse = await agent
+    .post("/api/auth/login")
+    .send({
+      email: user.email,
+      password: user.password,
+    });
+
+  assert.equal(loginResponse.status, 200);
+
+  const invalidQueries = [
+    "/api/tickets?status=pending",
+    "/api/tickets?priority=urgent",
+    "/api/tickets?page=0",
+    "/api/tickets?limit=101",
+    "/api/tickets?sortBy=password",
+    "/api/tickets?sortOrder=sideways",
+  ];
+
+  for (const query of invalidQueries) {
+    const response = await agent.get(query);
+
+    assert.equal(response.status, 400, `Expected 400 for ${query}`);
+    assert.equal(response.body.success, false);
+    assert.equal(response.body.message, "Validation failed.");
+  }
+});

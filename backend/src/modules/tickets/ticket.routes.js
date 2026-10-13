@@ -5,34 +5,43 @@ import validate from "../../middlewares/validate.middleware.js";
 
 
 import {
-  createTicketSchema,
-  updateTicketSchema,
+    createTicketSchema,
+    updateTicketSchema,
+    listTicketsQuerySchema,
 } from "./ticket.schema.js";
 
+
 import {
-  createTicket,
-  listTickets,
-  updateTicket,
-  deleteTicket,
+    createTicket,
+    listTickets,
+    updateTicket,
+    deleteTicket,
 } from "./ticket.controller.js";
 
 
 const router = Router();
 
 router.post(
-  "/",
-  authMiddleware,
-  validate(createTicketSchema),
-  createTicket
+    "/",
+    authMiddleware,
+    validate(createTicketSchema),
+    createTicket
 );
 
-router.get("/", authMiddleware, listTickets);
+
+router.get(
+    "/",
+    authMiddleware,
+    validate(listTicketsQuerySchema, "query"),
+    listTickets
+);
+
 
 router.put(
-  "/:ticketId",
-  authMiddleware,
-  validate(updateTicketSchema),
-  updateTicket
+    "/:ticketId",
+    authMiddleware,
+    validate(updateTicketSchema),
+    updateTicket
 );
 
 
