@@ -8,6 +8,7 @@ import {
   Inbox,
   Search,
   Pencil,
+  Trash2,
   Tag,
   Ticket as TicketIcon,
 } from "lucide-react";
@@ -17,6 +18,8 @@ interface TicketWorkspaceProps {
   tickets: Ticket[];
   onCreateTicket?: () => void;
   onEditTicket?: (ticket: Ticket) => void;
+  onDeleteTicket?: (ticket: Ticket) => void;
+  isDeletingTicket?: boolean;
   onUpdateStatus?: (ticketId: string, status: TicketStatus) => void | Promise<void>;
   isUpdatingStatus?: boolean;
   updateError?: string | null;
@@ -58,6 +61,8 @@ export default function TicketWorkspace({
   tickets,
   onCreateTicket,
   onEditTicket,
+  onDeleteTicket,
+  isDeletingTicket = false,
   onUpdateStatus,
   isUpdatingStatus = false,
   updateError = null,
@@ -186,6 +191,17 @@ export default function TicketWorkspace({
                     >
                       <Pencil size={13} />
                       Edit ticket
+                    </button>
+                  )}
+                  {onDeleteTicket && (
+                    <button
+                      type="button"
+                      onClick={() => onDeleteTicket(selectedTicket)}
+                      disabled={isDeletingTicket}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E7B7AA] px-3 text-xs font-medium text-[#A44029] transition hover:bg-[#F9E6E0] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Trash2 size={13} />
+                      Delete ticket
                     </button>
                   )}
                 </div>

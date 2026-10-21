@@ -1,3 +1,4 @@
+import "./App.css";
 import { useEffect, useState, type SubmitEvent } from "react";
 import {
   Activity,
@@ -24,7 +25,9 @@ import { useAuth } from "./features/auth/useAuth";
 import TicketWorkspace from "./features/tickets/TicketWorkspace";
 import CreateTicketModal from "./components/tickets/CreateTicketModal";
 import EditTicketModal from "./components/tickets/EditTicketModal";
+import DeleteTicketModal from "./components/tickets/DeleteTicketModal";
 import { createTicket, getTickets, updateTicket, type CreateTicketInput, type UpdateTicketInput } from "./features/tickets/ticket.api";
+import { useTicketDeletion } from "./features/tickets/useTicketDeletion";
 import type { Ticket as TicketRecord, TicketStatus } from "./features/tickets/ticket.types";
 
 type Theme = "light" | "dark" | "system";
@@ -77,7 +80,7 @@ function App() {
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
-  const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
   const [ticketReloadKey, setTicketReloadKey] = useState(0);
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState(false);
@@ -89,6 +92,12 @@ function App() {
   const [isEditTicketOpen, setIsEditTicketOpen] = useState(false);
   const [isSavingTicket, setIsSavingTicket] = useState(false);
   const [editTicketError, setEditTicketError] = useState<string | null>(null);
+
+  const ticketDeletion = useTicketDeletion((ticket) => {
+    setActionMessage(`Ticket "${ticket.title}" deleted successfully.`);
+    setTicketsLoading(true);
+    setTicketReloadKey((current) => current + 1);
+  });
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -119,14 +128,11 @@ useEffect(() => {
   let cancelled = false
 
   async function loadTickets() {
-    setTicketsLoading(true)
-
     try {
       const allTickets: TicketRecord[] = []
       let page = 1
-      const MAX_PAGES = 50
 
-      while (page <= MAX_PAGES) {
+      while (true) {
         const response = await getTickets({
           page,
           limit: 100,
@@ -938,6 +944,8 @@ useEffect(() => {
                   tickets={tickets}
                   onCreateTicket={openCreateTicket}
                   onEditTicket={openEditTicket}
+                  onDeleteTicket={ticketDeletion.open}
+                  isDeletingTicket={ticketDeletion.isDeleting}
                   onUpdateStatus={handleUpdateTicketStatus}
                   isUpdatingStatus={updatingTicketId !== null}
                   updateError={ticketUpdateError}
@@ -963,7 +971,6 @@ useEffect(() => {
       </main>
 
       <CreateTicketModal
-        key={isCreateTicketOpen ? "open" : "closed"}
         isOpen={isCreateTicketOpen}
         onClose={() => setIsCreateTicketOpen(false)}
         onSubmit={handleCreateTicket}
@@ -980,6 +987,16 @@ useEffect(() => {
           onSubmit={handleEditTicket}
           isSubmitting={isSavingTicket}
           error={editTicketError}
+        />
+      )}
+
+      {ticketDeletion.isOpen && ticketDeletion.ticket && (
+        <DeleteTicketModal
+          ticket={ticketDeletion.ticket}
+          onClose={ticketDeletion.close}
+          onConfirm={ticketDeletion.confirm}
+          isDeleting={ticketDeletion.isDeleting}
+          error={ticketDeletion.error}
         />
       )}
     </div>
