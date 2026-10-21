@@ -1,5 +1,7 @@
 
 const errorMiddleware = (err, req, res, next) => {
+    console.error(err);
+
     const statusCode = err.statusCode || 500;
 
     res.status(statusCode).json({
@@ -8,6 +10,7 @@ const errorMiddleware = (err, req, res, next) => {
             statusCode >= 500
                 ? "An unexpected error occurred."
                 : err.message,
+        ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
     });
 };
 

@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import healthRouter from "./routes/health.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
@@ -6,6 +7,12 @@ import cookieParser from "cookie-parser";
 import ticketRouter from "./modules/tickets/ticket.routes.js";
 const app = express();
 
+app.use(
+    cors({
+        origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+        credentials: true,
+    })
+);
 app.use(express.json());
 app.use(cookieParser());
 

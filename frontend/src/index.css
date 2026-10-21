@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--app-canvas);
+  --color-surface: var(--app-surface);
+  --color-surface-raised: var(--app-surface-raised);
+  --color-ink: var(--app-ink);
+  --color-muted: var(--app-muted);
+  --color-line: var(--app-line);
+
+  --color-accent: #c65332;
+  --color-accent-hover: #a94327;
+
+  --color-success-soft: #dce9de;
+  --color-success-ink: #2f5d42;
+
+  --color-priority-high: #b9382d;
+  --color-priority-medium: #996516;
+  --color-priority-low: #386b54;
+
+  --radius-panel: 0.875rem;
+}
+
+:root {
+  color-scheme: light;
+
+  --app-canvas: #f5f4ef;
+  --app-surface: #ffffff;
+  --app-surface-raised: #eeede6;
+  --app-ink: #222620;
+  --app-muted: #656b63;
+  --app-line: #dfe1d8;
+
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-canvas: #171916;
+  --app-surface: #20231f;
+  --app-surface-raised: #292d27;
+  --app-ink: #eceee7;
+  --app-muted: #a1a79c;
+  --app-line: #383d35;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--app-canvas);
+  color: var(--app-ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--app-ink);
+  background: #f3d1c4;
+}
+
+/* Subtle glass surface that adapts to light and dark themes. */
+.glass-panel {
+  background-color: color-mix(
+    in srgb,
+    var(--app-surface) 84%,
+    transparent
+  );
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-color: color-mix(in srgb, var(--app-line) 80%, transparent);
+}
+
+/* Gentle lift on dashboard cards. */
+.hover-lift {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 7%);
+}
+
+/* Small entrance motion when the dashboard content mounts. */
+.devdesk-enter {
+  animation: devdesk-enter 420ms ease-out both;
+}
+
+@keyframes devdesk-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Respect the user's reduced-motion system setting. */
+@media (prefers-reduced-motion: reduce) {
+  .devdesk-enter {
+    animation: none;
+  }
+
+  .hover-lift {
+    transition: none;
+  }
+
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
