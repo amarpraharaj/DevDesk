@@ -68,3 +68,31 @@ export function logoutUser() {
     method: 'POST',
   })
 }
+
+
+type ForgotPasswordResponse = {
+  success: true
+  message: string
+}
+
+type ResetPasswordResponse = {
+  success: true
+  message: string
+}
+
+export function forgotPasswordUser(email: string) {
+  return apiRequest<ForgotPasswordResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: { email },
+  })
+}
+
+export function resetPasswordUser(input: {
+  token: string
+  password: string
+}) {
+  return apiRequest<ResetPasswordResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: input,
+  })
+}

@@ -24,6 +24,16 @@ const userSchema = new mongoose.Schema(
             required: [true, "Password hash is required."],
             select: false,
         },
+
+        resetPasswordTokenHash: {
+            type: String,
+            select: false,
+        },
+
+        resetPasswordExpiresAt: {
+            type: Date,
+            select: false,
+        },
     },
     {
         timestamps: true,

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ArrowUpRight,
+  ArrowLeft,
   CalendarDays,
   CircleCheck,
   CircleDot,
@@ -68,6 +69,7 @@ export default function TicketWorkspace({
   updateError = null,
 }: TicketWorkspaceProps) {
   const [search, setSearch] = useState("");
+  const [mobileView, setMobileView] = useState<"queue" | "detail">("queue");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     tickets[0]?.id ?? null,
   );
@@ -107,7 +109,7 @@ export default function TicketWorkspace({
           <button
             type="button"
             onClick={onCreateTicket}
-            className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-lg bg-accent px-4 text-xs font-medium text-white transition hover:bg-accent-hover focus-visible:outline-offset-4"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 self-start rounded-lg bg-accent px-4 text-xs font-medium text-white transition hover:bg-accent-hover focus-visible:outline-offset-4 sm:w-auto"
           >
             <TicketIcon size={15} />
             New ticket
@@ -115,8 +117,8 @@ export default function TicketWorkspace({
         )}
       </div>
 
-      <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[minmax(270px,0.83fr)_minmax(0,1.4fr)]">
-        <div className="min-w-0 border-b border-line lg:border-b-0 lg:border-r">
+      <div className="grid min-h-130 grid-cols-1 lg:grid-cols-[minmax(270px,0.83fr)_minmax(0,1.4fr)]">
+        <div className={`min-w-0 border-b border-line lg:border-b-0 lg:border-r ${mobileView === "detail" ? "hidden lg:block" : ""}`}>
           <div className="flex items-center justify-between px-5 pb-3 pt-5">
             <span className="text-[10px] font-semibold tracking-[1.3px] text-muted">IN YOUR QUEUE</span>
             <span className="font-mono text-xs text-muted">{String(visibleTickets.length).padStart(2, "0")}</span>
@@ -129,7 +131,7 @@ export default function TicketWorkspace({
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Find an issue..."
                 aria-label="Search tickets"
-                className="h-10 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-xs outline-none transition placeholder:text-muted/80 focus:border-accent"
+                className="h-11 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm outline-none transition placeholder:text-muted/80 focus:border-accent"
               />
             </label>
           </div>
@@ -140,7 +142,10 @@ export default function TicketWorkspace({
                 <button
                   type="button"
                   key={ticket.id}
-                  onClick={() => setSelectedTicketId(ticket.id)}
+                  onClick={() => {
+                    setSelectedTicketId(ticket.id);
+                    setMobileView("detail");
+                  }}
                   aria-pressed={isSelected}
                   className={`group relative w-full border-l-2 px-5 py-4 text-left transition ${isSelected ? "border-accent bg-[#F7F4ED]" : "border-transparent hover:bg-[#FAFAF7]"}`}
                 >
@@ -173,7 +178,17 @@ export default function TicketWorkspace({
           </div>
         </div>
 
-        <div className="min-w-0 p-5 sm:p-7">
+        <div className={`min-w-0 p-4 sm:p-7 ${mobileView === "queue" ? "hidden lg:block" : ""}`}>
+          <div className="mb-4 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileView("queue")}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm font-medium text-ink transition hover:bg-canvas focus-visible:outline-offset-2"
+            >
+              <ArrowLeft size={16} aria-hidden="true" />
+              Back to queue
+            </button>
+          </div>
           {selectedTicket ? (
             <article aria-live="polite">
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -187,7 +202,7 @@ export default function TicketWorkspace({
                     <button
                       type="button"
                       onClick={() => onEditTicket(selectedTicket)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-xs font-medium text-ink transition hover:bg-canvas focus-visible:outline-offset-2"
+                      className="inline-flex h-11 items-center gap-2 rounded-md border border-line px-2.5 text-xs font-medium text-ink transition hover:bg-canvas focus-visible:outline-offset-2 sm:px-3"
                     >
                       <Pencil size={13} />
                       Edit ticket
@@ -198,7 +213,7 @@ export default function TicketWorkspace({
                       type="button"
                       onClick={() => onDeleteTicket(selectedTicket)}
                       disabled={isDeletingTicket}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-[#E7B7AA] px-3 text-xs font-medium text-[#A44029] transition hover:bg-[#F9E6E0] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-11 items-center gap-2 rounded-md border border-[#E7B7AA] px-2.5 text-xs font-medium text-[#A44029] transition hover:bg-[#F9E6E0] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:px-3"
                     >
                       <Trash2 size={13} />
                       Delete ticket
@@ -225,7 +240,7 @@ export default function TicketWorkspace({
                           value={selectedTicket.status}
                           disabled={isUpdatingStatus}
                           onChange={(event) => void onUpdateStatus(selectedTicket.id, event.target.value as TicketStatus)}
-                          className="h-9 min-w-32 rounded-md border border-line bg-canvas px-2.5 text-xs text-ink outline-none transition focus:border-accent disabled:cursor-wait disabled:opacity-60"
+                          className="h-11 min-w-32 rounded-md border border-line bg-canvas px-2.5 text-xs text-ink outline-none transition focus:border-accent disabled:cursor-wait disabled:opacity-60"
                         >
                           <option value="open">Open</option>
                           <option value="in-progress">In progress</option>
@@ -260,7 +275,7 @@ export default function TicketWorkspace({
               </div>
             </article>
           ) : (
-            <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
+            <div className="flex min-h-90 flex-col items-center justify-center text-center">
               <div className="mb-4 flex size-12 items-center justify-center rounded-full border border-line text-muted"><Inbox size={21} /></div>
               <h3 className="text-base font-semibold">Choose an issue</h3>
               <p className="mt-2 max-w-xs text-xs leading-5 text-muted">Select a ticket from the queue to inspect its details.</p>

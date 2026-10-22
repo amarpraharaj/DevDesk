@@ -1,0 +1,78 @@
+/* App-level refinements for DevDesk.
+   Component layout and most visual styling remain in Tailwind classes;
+   global design tokens and theme colours live in index.css. */
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Prevent accidental horizontal page scrolling on narrow screens. */
+body {
+  overflow-x: clip;
+}
+
+/* Improve touch interaction on phones without changing the visual design. */
+#root :where(button, a, input, select, textarea) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Inputs should be allowed to shrink inside flex and grid layouts. */
+#root :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep long backend messages, ticket IDs, and email addresses from widening layouts. */
+#root :where([role="alert"], [role="status"]) {
+  overflow-wrap: anywhere;
+}
+
+#root :where(code, pre, .font-mono) {
+  overflow-wrap: anywhere;
+}
+
+/* Subtle scrollbars for long ticket lists and other overflow areas. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-line) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--app-line);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--app-muted);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Keep keyboard focus visible while avoiding extra outlines on pointer clicks. */
+#root :where(button, a, input, select, textarea):focus-visible {
+  scroll-margin-block: 1rem;
+}
+
+/* Native smooth scrolling, while respecting reduced-motion preferences. */
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

@@ -1,15 +1,53 @@
 import { Router } from "express";
+
 import validate from "../../middlewares/validate.middleware.js";
-import { register, login } from "./auth.controller.js";
-import { registerSchema, loginSchema } from "./auth.schema.js";
 import authMiddleware from "../../middlewares/auth.middleware.js";
+
+import {
+    register,
+    login,
+    forgotPassword,
+    resetPassword,
+} from "./auth.controller.js";
+
+import {
+    registerSchema,
+    loginSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema,
+} from "./auth.schema.js";
 
 const router = Router();
 
-router.post("/register", validate(registerSchema), register);
-router.post("/login", validate(loginSchema), login);
+// Register
+router.post(
+    "/register",
+    validate(registerSchema),
+    register
+);
 
+// Login
+router.post(
+    "/login",
+    validate(loginSchema),
+    login
+);
 
+// Forgot password
+router.post(
+    "/forgot-password",
+    validate(forgotPasswordSchema),
+    forgotPassword
+);
+
+// Reset password
+router.post(
+    "/reset-password",
+    validate(resetPasswordSchema),
+    resetPassword
+);
+
+// Get current authenticated user
 router.get("/me", authMiddleware, (req, res) => {
     return res.status(200).json({
         success: true,
@@ -23,7 +61,7 @@ router.get("/me", authMiddleware, (req, res) => {
     });
 });
 
-
+// Logout
 router.post("/logout", (req, res) => {
     res.clearCookie("accessToken", {
         httpOnly: true,
@@ -37,6 +75,5 @@ router.post("/logout", (req, res) => {
         message: "Logout successful.",
     });
 });
-
 
 export default router;

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "./features/auth/useAuth";
+import { forgotPasswordUser, resetPasswordUser } from "./features/auth/auth.api";
 import TicketWorkspace from "./features/tickets/TicketWorkspace";
 import CreateTicketModal from "./components/tickets/CreateTicketModal";
 import EditTicketModal from "./components/tickets/EditTicketModal";
@@ -31,7 +32,7 @@ import { useTicketDeletion } from "./features/tickets/useTicketDeletion";
 import type { Ticket as TicketRecord, TicketStatus } from "./features/tickets/ticket.types";
 
 type Theme = "light" | "dark" | "system";
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "forgot-password" | "reset-password";
 
 const navigation = [
   { label: "Overview", icon: LayoutDashboard },
@@ -68,11 +69,19 @@ function App() {
   });
 
   const [activePage, setActivePage] = useState("Overview");
-  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [resetToken] = useState(
+    () => new URLSearchParams(window.location.search).get("token") ?? "",
+  );
+  const [authMode, setAuthMode] = useState<AuthMode>(() =>
+    new URLSearchParams(window.location.search).has("token")
+      ? "reset-password"
+      : "login",
+  );
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,6 +188,7 @@ useEffect(() => {
     setFormError(null);
     setFormSuccess(null);
     setPassword("");
+    setConfirmPassword("");
     clearError();
   }
 
@@ -214,6 +224,58 @@ useEffect(() => {
         setPassword("");
         setActivePage("Overview");
       }
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleForgotPasswordSubmit(
+    event: SubmitEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+    setIsSubmitting(true);
+    clearError();
+
+    try {
+      const response = await forgotPasswordUser(email.trim().toLowerCase());
+      setFormSuccess(response.message);
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResetPasswordSubmit(
+    event: SubmitEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+
+    if (!resetToken) {
+      setFormError("This reset link is missing its token. Request a new password reset link.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setFormError("The passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    clearError();
+
+    try {
+      const response = await resetPasswordUser({ token: resetToken, password });
+      setPassword("");
+      setConfirmPassword("");
+      setAuthMode("login");
+      setFormSuccess(response.message);
     } catch (error) {
       setFormError(getErrorMessage(error));
     } finally {
@@ -410,10 +472,22 @@ useEffect(() => {
             <div className="glass-panel rounded-2xl border border-line p-6 shadow-sm sm:p-8">
               <div className="mb-7 lg:hidden">
                 <h1 className="text-2xl font-semibold tracking-tight">
-                  Your work, organised.
+                  {authMode === "register"
+                    ? "Create your account"
+                    : authMode === "forgot-password"
+                      ? "Reset your password"
+                      : authMode === "reset-password"
+                        ? "Choose a new password"
+                        : "Your work, organised."}
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-muted">
-                  Sign in to continue to your workspace.
+                  {authMode === "forgot-password"
+                    ? "Enter your account email and we’ll send reset instructions."
+                    : authMode === "reset-password"
+                      ? "Choose a new password for your DevDesk account."
+                      : authMode === "register"
+                        ? "Get started with your personal workspace."
+                        : "Sign in to continue to your workspace."}
                 </p>
               </div>
 
@@ -421,46 +495,54 @@ useEffect(() => {
                 <h2 className="text-2xl font-semibold tracking-tight">
                   {authMode === "login"
                     ? "Welcome back"
-                    : "Create your account"}
+                    : authMode === "register"
+                      ? "Create your account"
+                      : authMode === "forgot-password"
+                        ? "Reset your password"
+                        : "Choose a new password"}
                 </h2>
-
                 <p className="mt-2 text-sm leading-6 text-muted">
                   {authMode === "login"
                     ? "Sign in to pick up where you left off."
-                    : "Get started with your personal workspace."}
+                    : authMode === "register"
+                      ? "Get started with your personal workspace."
+                      : authMode === "forgot-password"
+                        ? "We’ll email you a secure link if an account matches."
+                        : "Your reset link is valid for a limited time."}
                 </p>
               </div>
 
-              <div
-                className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-surface-raised p-1"
-                aria-label="Authentication options"
-              >
-                <button
-                  type="button"
-                  onClick={() => switchAuthMode("login")}
-                  aria-pressed={authMode === "login"}
-                  className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    authMode === "login"
-                      ? "bg-surface text-ink shadow-sm"
-                      : "text-muted hover:text-ink"
-                  }`}
+              {(authMode === "login" || authMode === "register") && (
+                <div
+                  className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-surface-raised p-1"
+                  aria-label="Authentication options"
                 >
-                  Sign in
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => switchAuthMode("register")}
-                  aria-pressed={authMode === "register"}
-                  className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    authMode === "register"
-                      ? "bg-surface text-ink shadow-sm"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  Create account
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => switchAuthMode("login")}
+                    aria-pressed={authMode === "login"}
+                    className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      authMode === "login"
+                        ? "bg-surface text-ink shadow-sm"
+                        : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchAuthMode("register")}
+                    aria-pressed={authMode === "register"}
+                    className={`rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      authMode === "register"
+                        ? "bg-surface text-ink shadow-sm"
+                        : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    Create account
+                  </button>
+                </div>
+              )}
 
               {(formError || sessionError) && (
                 <div
@@ -481,18 +563,22 @@ useEffect(() => {
               )}
 
               <form
-                onSubmit={(event) => void handleAuthSubmit(event)}
+                onSubmit={(event) => {
+                  if (authMode === "forgot-password") {
+                    void handleForgotPasswordSubmit(event);
+                  } else if (authMode === "reset-password") {
+                    void handleResetPasswordSubmit(event);
+                  } else {
+                    void handleAuthSubmit(event);
+                  }
+                }}
                 className="space-y-4"
               >
                 {authMode === "register" && (
                   <div>
-                    <label
-                      htmlFor="register-name"
-                      className="mb-2 block text-sm font-medium"
-                    >
+                    <label htmlFor="register-name" className="mb-2 block text-sm font-medium">
                       Full name
                     </label>
-
                     <input
                       id="register-name"
                       name="name"
@@ -509,78 +595,97 @@ useEffect(() => {
                   </div>
                 )}
 
-                <div>
-                  <label
-                    htmlFor="auth-email"
-                    className="mb-2 block text-sm font-medium"
-                  >
-                    Email address
-                  </label>
-
-                  <input
-                    id="auth-email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <label
-                      htmlFor="auth-password"
-                      className="block text-sm font-medium"
-                    >
-                      Password
+                {authMode !== "reset-password" && (
+                  <div>
+                    <label htmlFor="auth-email" className="mb-2 block text-sm font-medium">
+                      Email address
                     </label>
+                    <input
+                      id="auth-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
+                  </div>
+                )}
 
-                    {authMode === "login" && (
-                      <span className="text-xs text-muted">
-                        Your account password
-                      </span>
+                {(authMode === "login" || authMode === "register" || authMode === "reset-password") && (
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label htmlFor="auth-password" className="block text-sm font-medium">
+                        {authMode === "reset-password" ? "New password" : "Password"}
+                      </label>
+                      {authMode === "login" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthMode("forgot-password");
+                            setFormError(null);
+                            setFormSuccess(null);
+                            clearError();
+                          }}
+                          className="text-xs font-medium text-accent hover:text-accent-hover"
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        id="auth-password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                        required
+                        minLength={authMode === "login" ? 1 : 8}
+                        maxLength={72}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder={authMode === "login" ? "Enter your password" : "At least 8 characters"}
+                        className="w-full rounded-lg border border-line bg-surface py-3 pl-3.5 pr-12 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        onClick={() => setShowPassword((current) => !current)}
+                        className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted transition-colors hover:text-ink"
+                      >
+                        {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {authMode === "reset-password" && (
+                  <div>
+                    <label htmlFor="confirm-password" className="mb-2 block text-sm font-medium">
+                      Confirm new password
+                    </label>
+                    <input
+                      id="confirm-password"
+                      name="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      maxLength={72}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Enter the new password again"
+                      className="w-full rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
+                    {!resetToken && (
+                      <p className="mt-2 text-xs leading-5 text-priority-high">
+                        This link has no reset token. Request a new reset link.
+                      </p>
                     )}
                   </div>
-
-                  <div className="relative">
-                    <input
-                      id="auth-password"
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete={
-                        authMode === "login"
-                          ? "current-password"
-                          : "new-password"
-                      }
-                      required
-                      minLength={authMode === "register" ? 8 : 1}
-                      maxLength={72}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder={
-                        authMode === "register"
-                          ? "At least 8 characters"
-                          : "Enter your password"
-                      }
-                      className="w-full rounded-lg border border-line bg-surface py-3 pl-3.5 pr-12 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
-                    />
-
-                    <button
-                      type="button"
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
-                      onClick={() => setShowPassword((current) => !current)}
-                      className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-muted transition-colors hover:text-ink"
-                    >
-                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                    </button>
-                  </div>
-                </div>
+                )}
 
                 {authMode === "register" && (
                   <p className="text-xs leading-5 text-muted">
@@ -590,18 +695,31 @@ useEffect(() => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (authMode === "reset-password" && !resetToken)}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting
                     ? "Please wait…"
                     : authMode === "login"
                       ? "Sign in"
-                      : "Create account"}
-
+                      : authMode === "register"
+                        ? "Create account"
+                        : authMode === "forgot-password"
+                          ? "Send reset link"
+                          : "Update password"}
                   {!isSubmitting && <ArrowRight size={17} />}
                 </button>
               </form>
+
+              {(authMode === "forgot-password" || authMode === "reset-password") && (
+                <button
+                  type="button"
+                  onClick={() => switchAuthMode("login")}
+                  className="mt-5 w-full text-center text-sm font-medium text-accent hover:text-accent-hover"
+                >
+                  Back to sign in
+                </button>
+              )}
 
               <p className="mt-6 text-center text-xs leading-5 text-muted">
                 Your session uses an HttpOnly authentication cookie.
@@ -620,7 +738,7 @@ useEffect(() => {
   // Authenticated view: dashboard.
   return (
     <div className="min-h-screen bg-canvas text-ink md:flex">
-      <aside className="glass-panel flex w-full shrink-0 flex-col border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-64 md:border-r md:border-b-0">
+      <aside className="glass-panel hidden shrink-0 flex-col border-b border-line bg-surface md:sticky md:top-0 md:flex md:h-screen md:w-64 md:border-r md:border-b-0">
         <div className="flex items-center gap-3 px-5 py-5">
           <div className="flex size-9 items-center justify-center rounded-xl bg-accent text-white shadow-sm">
             <Command size={19} />
@@ -751,6 +869,43 @@ useEffect(() => {
       </aside>
 
       <main className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:hidden">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+              <Command size={18} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold tracking-tight">DevDesk</p>
+              <p className="truncate text-[11px] text-muted">Personal workspace</p>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <label htmlFor="mobile-dashboard-theme" className="sr-only">
+              Appearance
+            </label>
+            <select
+              id="mobile-dashboard-theme"
+              value={theme}
+              onChange={(event) => setTheme(event.target.value as Theme)}
+              className="max-w-28 rounded-lg border border-line bg-surface px-2 py-2 text-xs text-ink"
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+            <button
+              type="button"
+              aria-label="Sign out"
+              title="Sign out"
+              onClick={() => void handleLogout()}
+              className="rounded-lg p-2 text-muted transition-colors hover:bg-canvas hover:text-ink"
+            >
+              <LogOut size={17} />
+            </button>
+          </div>
+        </div>
+
         <header className="glass-panel sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line px-5 py-4 md:px-8">
           <div>
             <p className="text-xs text-muted">Workspace / {activePage}</p>
@@ -770,7 +925,7 @@ useEffect(() => {
           </button>
         </header>
 
-        <div className="devdesk-enter mx-auto max-w-6xl p-5 md:p-8">
+        <div className="devdesk-enter mx-auto max-w-6xl px-5 pb-28 pt-5 md:p-8">
           {actionMessage && (
             <div
               role="status"
@@ -969,6 +1124,31 @@ useEffect(() => {
           )}
         </div>
       </main>
+
+      <nav
+        aria-label="Mobile navigation"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-surface px-2 pb-2 pt-2 shadow-lg md:hidden"
+      >
+        {navigation.map(({ label, icon: Icon }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => {
+              setActivePage(label);
+              setActionMessage(null);
+            }}
+            aria-current={activePage === label ? "page" : undefined}
+            className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] transition-colors ${
+              activePage === label
+                ? "bg-canvas font-semibold text-ink"
+                : "text-muted hover:bg-canvas hover:text-ink"
+            }`}
+          >
+            <Icon size={19} aria-hidden="true" />
+            <span className="max-w-full truncate">{label}</span>
+          </button>
+        ))}
+      </nav>
 
       <CreateTicketModal
         isOpen={isCreateTicketOpen}
