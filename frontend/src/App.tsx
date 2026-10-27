@@ -14,6 +14,7 @@ import {
   LogOut,
   Moon,
   Plus,
+  RefreshCw,
   Search,
   Settings2,
   Sun,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "./features/auth/useAuth";
+import { apiRequest } from "./lib/api";
 import { forgotPasswordUser, resetPasswordUser } from "./features/auth/auth.api";
 import TicketWorkspace from "./features/tickets/TicketWorkspace";
 import CreateTicketModal from "./components/tickets/CreateTicketModal";
@@ -34,11 +36,77 @@ import type { Ticket as TicketRecord, TicketStatus } from "./features/tickets/ti
 type Theme = "light" | "dark" | "system";
 type AuthMode = "login" | "register" | "forgot-password" | "reset-password";
 
+type ActivityAction =
+  | "ticket.created"
+  | "ticket.updated"
+  | "ticket.status_changed"
+  | "ticket.deleted";
+
+type ActivityChange = {
+  field: string;
+  from: string;
+  to: string;
+};
+
+type ActivityRecord = {
+  id: string;
+  ticketId: string;
+  ticketTitle: string;
+  action: ActivityAction;
+  message: string;
+  changes: ActivityChange[];
+  createdAt: string;
+};
+
+type ActivityPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+};
+
+type ActivityListResponse = {
+  success: true;
+  data: {
+    activities: ActivityRecord[];
+    pagination: ActivityPagination;
+  };
+};
+
+function formatActivityDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getActivityActionLabel(action: ActivityAction): string {
+  switch (action) {
+    case "ticket.created":
+      return "Ticket created";
+    case "ticket.updated":
+      return "Ticket updated";
+    case "ticket.status_changed":
+      return "Status changed";
+    case "ticket.deleted":
+      return "Ticket deleted";
+  }
+}
+
 const navigation = [
   { label: "Overview", icon: LayoutDashboard },
   { label: "My tickets", icon: Inbox },
   { label: "All tickets", icon: Ticket },
   { label: "Activity", icon: Activity },
+  { label: "Help & Support", icon: CircleHelp },
 ];
 
 function getErrorMessage(error: unknown): string {
@@ -89,6 +157,13 @@ function App() {
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [activities, setActivities] = useState<ActivityRecord[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityPagination, setActivityPagination] =
+    useState<ActivityPagination | null>(null);
+  const [activityReloadKey, setActivityReloadKey] = useState(0);
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketsError, setTicketsError] = useState<string | null>(null);
   const [ticketReloadKey, setTicketReloadKey] = useState(0);
@@ -179,7 +254,47 @@ useEffect(() => {
   return () => {
     cancelled = true
   }
-}, [user?.id, ticketReloadKey])
+}, [user?.id, ticketReloadKey]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || activePage !== "Activity") return;
+
+    let cancelled = false;
+
+    async function loadActivities() {
+      setActivitiesLoading(true);
+      setActivitiesError(null);
+
+      try {
+        const response = await apiRequest<ActivityListResponse>(
+          `/activities?page=${activityPage}&limit=10`,
+          { method: "GET" },
+        );
+
+        if (!cancelled) {
+          setActivities(response.data.activities);
+          setActivityPagination(response.data.pagination);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setActivities([]);
+          setActivityPagination(null);
+          setActivitiesError(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setActivitiesLoading(false);
+        }
+      }
+    }
+
+    void loadActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, activePage, activityPage, ticketReloadKey, activityReloadKey]);
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : SunMoon;
 
@@ -752,9 +867,10 @@ useEffect(() => {
           <button
             type="button"
             aria-label="Workspace options"
-            onClick={() =>
-              setActionMessage("Workspace options are coming soon.")
-            }
+            onClick={() => {
+              setActivePage("Settings");
+              setActionMessage(null);
+            }}
             className="rounded-lg p-2 text-muted transition-colors duration-200 hover:bg-canvas hover:text-ink"
           >
             <ChevronDown size={17} />
@@ -806,19 +922,16 @@ useEffect(() => {
         <div className="mt-auto space-y-1 p-3">
           <button
             type="button"
-            onClick={() =>
-              setActionMessage("Help and support will be added soon.")
-            }
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted transition-colors duration-200 hover:bg-canvas hover:text-ink"
-          >
-            <CircleHelp size={17} />
-            Help and support
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActionMessage("Settings are coming soon.")}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted transition-colors duration-200 hover:bg-canvas hover:text-ink"
+            onClick={() => {
+              setActivePage("Settings");
+              setActionMessage(null);
+            }}
+            aria-current={activePage === "Settings" ? "page" : undefined}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-200 ${
+              activePage === "Settings"
+                ? "bg-canvas font-medium text-ink shadow-sm"
+                : "text-muted hover:bg-canvas hover:text-ink"
+            }`}
           >
             <Settings2 size={17} />
             Settings
@@ -881,6 +994,20 @@ useEffect(() => {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              aria-label="Open settings"
+              title="Settings"
+              onClick={() => {
+                setActivePage("Settings");
+                setActionMessage(null);
+              }}
+              className={`rounded-lg p-2 transition-colors hover:bg-canvas hover:text-ink ${
+                activePage === "Settings" ? "bg-canvas text-ink" : "text-muted"
+              }`}
+            >
+              <Settings2 size={17} />
+            </button>
             <label htmlFor="mobile-dashboard-theme" className="sr-only">
               Appearance
             </label>
@@ -914,15 +1041,17 @@ useEffect(() => {
             </h1>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateTicket}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-md active:translate-y-0"
-          >
-            <Plus size={17} />
-            <span className="hidden sm:inline">New ticket</span>
-            <span className="sm:hidden">New</span>
-          </button>
+          {activePage !== "Settings" && (
+            <button
+              type="button"
+              onClick={openCreateTicket}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-accent-hover hover:shadow-md active:translate-y-0"
+            >
+              <Plus size={17} />
+              <span className="hidden sm:inline">New ticket</span>
+              <span className="sm:hidden">New</span>
+            </button>
+          )}
         </header>
 
         <div className="devdesk-enter mx-auto max-w-6xl px-5 pb-28 pt-5 md:p-8">
@@ -1107,20 +1236,385 @@ useEffect(() => {
                 />
               )}
             </>
-          ) : (
-            <section className="glass-panel rounded-panel border border-line bg-surface p-6 md:p-8">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-surface-raised">
-                <Activity size={21} />
+          ) : activePage === "Settings" ? (
+            <div className="space-y-6">
+              <div className="max-w-2xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+                  Preferences / Account
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                  Settings
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Manage your appearance preference and review the account you are signed in with.
+                </p>
               </div>
-              <h2 className="mt-5 text-xl font-semibold tracking-tight">
-                Activity
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
-                Ticket activity and recent updates are not available yet because
-                the backend does not currently expose an activity history
-                endpoint.
-              </p>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-surface-raised text-ink">
+                      <Command size={19} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Profile information</h3>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Your current DevDesk account
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex items-center gap-3 border-b border-line pb-5">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-success-soft text-base font-semibold text-success-ink">
+                      {user.name.trim().charAt(0).toUpperCase() || "U"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{user.name}</p>
+                      <p className="truncate text-sm text-muted">{user.email}</p>
+                    </div>
+                  </div>
+
+                  <dl className="mt-5 space-y-4">
+                    <div>
+                      <dt className="text-xs font-medium text-muted">Full name</dt>
+                      <dd className="mt-1 break-words text-sm text-ink">{user.name}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium text-muted">Email address</dt>
+                      <dd className="mt-1 break-all text-sm text-ink">{user.email}</dd>
+                    </div>
+                  </dl>
+
+                  <p className="mt-5 rounded-lg border border-line bg-surface-raised px-3 py-2.5 text-xs leading-5 text-muted">
+                    Profile details are read-only in this version of DevDesk.
+                  </p>
+                </section>
+
+                <div className="space-y-5">
+                  <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-surface-raised text-ink">
+                        <ThemeIcon size={19} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Appearance</h3>
+                        <p className="mt-0.5 text-xs text-muted">
+                          Choose how DevDesk looks on this device
+                        </p>
+                      </div>
+                    </div>
+
+                    <label htmlFor="settings-theme" className="mt-5 block text-sm font-medium">
+                      Theme preference
+                    </label>
+                    <select
+                      id="settings-theme"
+                      value={theme}
+                      onChange={(event) => setTheme(event.target.value as Theme)}
+                      className="mt-2 h-11 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none transition-colors focus:border-accent"
+                    >
+                      <option value="system">System default</option>
+                      <option value="light">Light mode</option>
+                      <option value="dark">Dark mode</option>
+                    </select>
+                    <p className="mt-2 text-xs leading-5 text-muted">
+                      System default follows your device's light or dark theme. Your preference is saved in this browser.
+                    </p>
+                  </section>
+
+                  <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-surface-raised text-ink">
+                        <LogOut size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold">Account and session</h3>
+                        <p className="mt-0.5 text-xs text-muted">
+                          Sign out of this DevDesk session
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm leading-6 text-muted">
+                      DevDesk uses an HttpOnly authentication cookie to protect your session. Sign out when you finish using a shared device.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleLogout()}
+                      className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-canvas focus-visible:outline-offset-2 sm:w-auto"
+                    >
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </section>
+                </div>
+              </div>
+            </div>
+          ) : activePage === "Activity" ? (
+            <section className="overflow-hidden rounded-panel border border-line bg-surface">
+              <div className="flex flex-col justify-between gap-4 border-b border-line px-5 py-5 sm:flex-row sm:items-center sm:px-7">
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold tracking-[1.8px] text-muted">
+                    WORKSPACE / AUDIT TRAIL
+                  </p>
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    Recent activity<span className="text-accent">.</span>
+                  </h2>
+                  <p className="mt-1.5 text-sm leading-6 text-muted">
+                    A history of ticket changes made in your workspace.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActivityReloadKey((current) => current + 1)}
+                  disabled={activitiesLoading}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-lg border border-line px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-canvas disabled:cursor-wait disabled:opacity-60"
+                >
+                  <RefreshCw size={15} className={activitiesLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+              </div>
+
+              {activitiesError && (
+                <div className="m-5 flex flex-col gap-3 rounded-xl border border-priority-high/30 bg-priority-high/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-priority-high">
+                      Could not load activity history
+                    </p>
+                    <p role="alert" className="mt-1 text-sm leading-6 text-priority-high">
+                      {activitiesError}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivityReloadKey((current) => current + 1)}
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg border border-priority-high/30 px-3 py-2 text-sm font-medium text-priority-high hover:bg-priority-high/10"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {activitiesLoading && activities.length === 0 && !activitiesError && (
+                <div role="status" className="px-5 py-12 text-center">
+                  <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-surface-raised text-muted">
+                    <RefreshCw size={20} className="animate-spin" />
+                  </div>
+                  <p className="mt-3 text-sm text-muted">Loading activity history…</p>
+                </div>
+              )}
+
+              {!activitiesLoading && !activitiesError && activities.length === 0 && (
+                <div className="px-5 py-12 text-center sm:px-8">
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-line text-muted">
+                    <Activity size={21} />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold">No activity yet</h3>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
+                    Create or update a ticket and its history will appear here.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openCreateTicket}
+                    className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+                  >
+                    <Plus size={16} />
+                    Create a ticket
+                  </button>
+                </div>
+              )}
+
+              {activities.length > 0 && (
+                <>
+                  {activitiesLoading && (
+                    <p role="status" className="px-5 pt-4 text-xs text-muted">
+                      Refreshing activity…
+                    </p>
+                  )}
+                  <ol className="divide-y divide-line">
+                    {activities.map((item) => {
+                      const EventIcon = item.action === "ticket.status_changed"
+                        ? CheckCircle2
+                        : item.action === "ticket.updated"
+                          ? Settings2
+                          : Ticket;
+
+                      return (
+                        <li key={item.id} className="flex gap-3 px-5 py-5 sm:gap-4 sm:px-7">
+                          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-muted">
+                            <EventIcon size={17} aria-hidden="true" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-ink">
+                                  {getActivityActionLabel(item.action)}
+                                </p>
+                                <p className="mt-1 break-words text-sm leading-6 text-muted">
+                                  {item.message}
+                                </p>
+                              </div>
+                              <time
+                                dateTime={item.createdAt}
+                                className="shrink-0 text-xs text-muted"
+                              >
+                                {formatActivityDate(item.createdAt)}
+                              </time>
+                            </div>
+                            <p className="mt-2 break-words text-xs font-medium text-ink">
+                              Ticket: {item.ticketTitle}
+                            </p>
+                            {item.changes.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {item.changes.map((change) => (
+                                  <span
+                                    key={`${item.id}-${change.field}`}
+                                    className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-line bg-canvas px-2 py-1 text-xs text-muted"
+                                  >
+                                    <span className="font-medium capitalize text-ink">
+                                      {change.field.replaceAll("-", " ")}:
+                                    </span>
+                                    <span className="break-words">
+                                      {change.from || "empty"} → {change.to || "empty"}
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+
+                  {activityPagination && (
+                    <div className="flex flex-col gap-3 border-t border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+                      <p className="text-xs text-muted">
+                        {activityPagination.total} {activityPagination.total === 1 ? "event" : "events"} · Page {activityPagination.page} of {Math.max(activityPagination.totalPages, 1)}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!activityPagination.hasPrevPage || activitiesLoading}
+                          onClick={() => setActivityPage((current) => Math.max(1, current - 1))}
+                          className="min-h-10 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!activityPagination.hasNextPage || activitiesLoading}
+                          onClick={() => setActivityPage((current) => current + 1)}
+                          className="min-h-10 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </section>
+          ) : (
+            <div className="space-y-6">
+              <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-7">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+                  Help / Getting started
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                  Help &amp; Support
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+                  Find quick answers and learn how to manage work in your DevDesk workspace.
+                </p>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={openCreateTicket}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+                  >
+                    <Plus size={16} />
+                    Create a ticket
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePage("Activity");
+                      setActionMessage(null);
+                    }}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+                  >
+                    <Activity size={16} />
+                    View activity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePage("All tickets");
+                      setActionMessage(null);
+                    }}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+                  >
+                    <Ticket size={16} />
+                    All tickets
+                  </button>
+                </div>
+              </section>
+
+              <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-7">
+                <h3 className="text-lg font-semibold">Using DevDesk</h3>
+                <ol className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <li className="rounded-xl border border-line bg-canvas p-4">
+                    <p className="text-sm font-semibold">1. Create a ticket</p>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      Describe the request, add helpful details, and choose a priority.
+                    </p>
+                  </li>
+                  <li className="rounded-xl border border-line bg-canvas p-4">
+                    <p className="text-sm font-semibold">2. Track your work</p>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      Find tickets in My tickets or All tickets, and update their status as work progresses.
+                    </p>
+                  </li>
+                  <li className="rounded-xl border border-line bg-canvas p-4">
+                    <p className="text-sm font-semibold">3. Review changes</p>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      Open Activity to see a paginated history of ticket creation and updates.
+                    </p>
+                  </li>
+                </ol>
+              </section>
+
+              <section className="glass-panel rounded-panel border border-line bg-surface p-5 sm:p-7">
+                <h3 className="text-lg font-semibold">Frequently asked questions</h3>
+                <dl className="mt-4 divide-y divide-line">
+                  <div className="py-4 first:pt-0 last:pb-0">
+                    <dt className="text-sm font-semibold">How do I change a ticket?</dt>
+                    <dd className="mt-2 text-sm leading-6 text-muted">
+                      Open My tickets or All tickets. From the ticket list you can edit its details, change its status, or delete it.
+                    </dd>
+                  </div>
+                  <div className="py-4">
+                    <dt className="text-sm font-semibold">Where can I see ticket history?</dt>
+                    <dd className="mt-2 text-sm leading-6 text-muted">
+                      Activity shows recent ticket events, including status and detail changes. Use Previous and Next to browse older events.
+                    </dd>
+                  </div>
+                  <div className="py-4">
+                    <dt className="text-sm font-semibold">How do I change the appearance?</dt>
+                    <dd className="mt-2 text-sm leading-6 text-muted">
+                      Choose System, Light, or Dark in Settings. Your selection is saved in this browser.
+                    </dd>
+                  </div>
+                  <div className="py-4">
+                    <dt className="text-sm font-semibold">How do I manage my account?</dt>
+                    <dd className="mt-2 text-sm leading-6 text-muted">
+                      Open Settings to review your account details or sign out of your current session.
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
           )}
         </div>
       </main>

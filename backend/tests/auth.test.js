@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import app from "../src/app.js";
 import User from "../src/modules/users/user.model.js";
 import Ticket from "../src/modules/tickets/ticket.model.js";
+import Activity from "../src/modules/activities/activity.model.js";
 
 const TEST_DB_URI = "mongodb://127.0.0.1:27017/devdesk_test";
 
@@ -16,6 +17,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+    await Activity.deleteMany({});
     await Ticket.deleteMany({});
     await User.deleteMany({});
 });
@@ -23,7 +25,8 @@ beforeEach(async () => {
 after(async () => {
     if (mongoose.connection.readyState === 1) {
         await User.deleteMany({});
-        await Ticket.deleteMany({});
+        await Activity.deleteMany({});
+    await Ticket.deleteMany({});
         await mongoose.disconnect();
     }
 });
@@ -1368,4 +1371,138 @@ test("POST /api/auth/forgot-password rejects an invalid email", async () => {
   assert.equal(response.status, 400);
   assert.equal(response.body.success, false);
   assert.equal(response.body.message, "Validation failed.");
+});
+
+
+test("GET /api/activities rejects unauthenticated requests", async () => {
+  const response = await request(app).get("/api/activities");
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.success, false);
+  assert.equal(response.body.message, "Authentication required.");
+});
+
+test("GET /api/activities returns empty list for new user", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Activity User",
+    email: "activity-empty@example.com",
+    password: "DevDesk@123",
+  };
+
+  await agent.post("/api/auth/register").send(user);
+  await agent.post("/api/auth/login").send({ email: user.email, password: user.password });
+
+  const response = await agent.get("/api/activities");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.deepEqual(response.body.data.activities, []);
+  assert.equal(response.body.data.pagination.total, 0);
+});
+
+test("Tickets CRUD operations record activities and return them in reverse chronological order", async () => {
+  const agent = request.agent(app);
+
+  const user = {
+    name: "Activity Audit User",
+    email: "activity-audit@example.com",
+    password: "DevDesk@123",
+  };
+
+  await agent.post("/api/auth/register").send(user);
+  await agent.post("/api/auth/login").send({ email: user.email, password: user.password });
+
+  // 1. Create ticket
+  const createRes = await agent.post("/api/tickets").send({
+    title: "Test Activity Ticket",
+    description: "Initial description",
+    priority: "low",
+  });
+  assert.equal(createRes.status, 201);
+  const ticketId = createRes.body.data.ticket.id;
+
+  // 2. Update ticket
+  const updateRes = await agent.put(`/api/tickets/${ticketId}`).send({
+    title: "Updated Activity Ticket",
+    priority: "high",
+  });
+  assert.equal(updateRes.status, 200);
+
+  // 3. Update status
+  const statusRes = await agent.put(`/api/tickets/${ticketId}`).send({
+    status: "in-progress",
+  });
+  assert.equal(statusRes.status, 200);
+
+  // 4. Delete ticket
+  const deleteRes = await agent.delete(`/api/tickets/${ticketId}`);
+  assert.equal(deleteRes.status, 200);
+
+  // Fetch activities
+  const response = await agent.get("/api/activities");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(response.body.data.activities.length, 4);
+
+  const actions = response.body.data.activities.map((a) => a.action);
+  assert.deepEqual(actions, [
+    "ticket.deleted",
+    "ticket.status_changed",
+    "ticket.updated",
+    "ticket.created",
+  ]);
+});
+
+test("GET /api/activities isolates activity per authenticated user", async () => {
+  const agentA = request.agent(app);
+  const agentB = request.agent(app);
+
+  const userA = { name: "User A", email: "user-a@example.com", password: "DevDesk@123" };
+  const userB = { name: "User B", email: "user-b@example.com", password: "DevDesk@123" };
+
+  await agentA.post("/api/auth/register").send(userA);
+  await agentA.post("/api/auth/login").send({ email: userA.email, password: userA.password });
+
+  await agentB.post("/api/auth/register").send(userB);
+  await agentB.post("/api/auth/login").send({ email: userB.email, password: userB.password });
+
+  // User A creates a ticket
+  await agentA.post("/api/tickets").send({
+    title: "User A Private Issue",
+    priority: "medium",
+  });
+
+  // User B checks activities
+  const responseB = await agentB.get("/api/activities");
+  assert.equal(responseB.status, 200);
+  assert.equal(responseB.body.data.activities.length, 0);
+
+  // User A checks activities
+  const responseA = await agentA.get("/api/activities");
+  assert.equal(responseA.status, 200);
+  assert.equal(responseA.body.data.activities.length, 1);
+  assert.equal(responseA.body.data.activities[0].ticketTitle, "User A Private Issue");
+});
+
+test("GET /api/activities validates pagination query parameters", async () => {
+  const agent = request.agent(app);
+
+  const user = { name: "Paging User", email: "paging-user@example.com", password: "DevDesk@123" };
+  await agent.post("/api/auth/register").send(user);
+  await agent.post("/api/auth/login").send({ email: user.email, password: user.password });
+
+  // Invalid limit > 100
+  const resOverLimit = await agent.get("/api/activities?limit=101");
+  assert.equal(resOverLimit.status, 400);
+
+  // Invalid page = 0
+  const resZeroPage = await agent.get("/api/activities?page=0");
+  assert.equal(resZeroPage.status, 400);
+
+  // Invalid non-integer
+  const resNotInt = await agent.get("/api/activities?page=abc");
+  assert.equal(resNotInt.status, 400);
 });

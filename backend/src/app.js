@@ -5,6 +5,7 @@ import healthRouter from "./routes/health.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import cookieParser from "cookie-parser";
 import ticketRouter from "./modules/tickets/ticket.routes.js";
+import activityRouter from "./modules/activities/activity.routes.js";
 const app = express();
 
 app.use(
@@ -20,6 +21,7 @@ app.use("/api", healthRouter);
 
 app.use("/api/auth", authRouter);
 app.use("/api/tickets", ticketRouter);
+app.use("/api/activities", activityRouter);
 
 app.use((req, res, next) => {
     res.status(404).json({
