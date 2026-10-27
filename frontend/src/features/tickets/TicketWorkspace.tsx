@@ -18,6 +18,7 @@ import type { Ticket, TicketPriority, TicketStatus } from "./ticket.types";
 interface TicketWorkspaceProps {
   tickets: Ticket[];
   onCreateTicket?: () => void;
+  onViewActivity?: () => void;
   onEditTicket?: (ticket: Ticket) => void;
   onDeleteTicket?: (ticket: Ticket) => void;
   isDeletingTicket?: boolean;
@@ -61,6 +62,7 @@ function formatDate(value: string): string {
 export default function TicketWorkspace({
   tickets,
   onCreateTicket,
+  onViewActivity,
   onEditTicket,
   onDeleteTicket,
   isDeletingTicket = false,
@@ -267,9 +269,20 @@ export default function TicketWorkspace({
                 <p className="text-[10px] font-semibold tracking-[1.6px] text-muted">ACTIVITY</p>
                 <div className="mt-4 flex gap-3">
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#E9D7CB] text-[10px] font-semibold text-[#713C29]">DD</div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-medium">Issue record</p>
-                    <p className="mt-1 text-xs leading-5 text-muted">Detailed activity history will appear here when the API supports it.</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">
+                      View the paginated activity history for your workspace.
+                    </p>
+                    {onViewActivity && (
+                      <button
+                        type="button"
+                        onClick={onViewActivity}
+                        className="mt-2 text-xs font-medium text-accent hover:text-accent-hover"
+                      >
+                        View activity history
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

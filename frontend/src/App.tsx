@@ -212,6 +212,9 @@ useEffect(() => {
   let cancelled = false
 
   async function loadTickets() {
+    setTicketsLoading(true)
+    setTicketsError(null)
+
     try {
       const allTickets: TicketRecord[] = []
       let page = 1
@@ -406,6 +409,14 @@ useEffect(() => {
       setActivePage("Overview");
       setFormSuccess(null);
       setPassword("");
+      setTickets([]);
+      setTicketsError(null);
+      setTicketsLoading(false);
+      setActivities([]);
+      setActivityPagination(null);
+      setActivitiesError(null);
+      setActivityPage(1);
+      setActivitiesLoading(false);
     } catch (error) {
       setActionMessage(getErrorMessage(error));
     }
@@ -1227,6 +1238,7 @@ useEffect(() => {
                 <TicketWorkspace
                   tickets={tickets}
                   onCreateTicket={openCreateTicket}
+                  onViewActivity={() => setActivePage("Activity")}
                   onEditTicket={openEditTicket}
                   onDeleteTicket={ticketDeletion.open}
                   isDeletingTicket={ticketDeletion.isDeleting}
