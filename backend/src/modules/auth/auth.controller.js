@@ -109,11 +109,9 @@ export const login = async (req, res, next) => {
 };
 
 
-
 export const forgotPassword = async (req, res, next) => {
     try {
         const { email } = req.validatedBody;
-
         const user = await User.findOne({ email });
 
         if (user) {
@@ -124,22 +122,43 @@ export const forgotPassword = async (req, res, next) => {
                 .digest("hex");
 
             user.resetPasswordExpiresAt = new Date(
-                Date.now() + 15 * 60 * 1000
+                Date.now() + 15 * 60 * 1000,
             );
 
             await user.save();
 
             const resetUrl = new URL(
                 "/reset-password",
-                process.env.FRONTEND_URL || "http://localhost:5173"
+                process.env.FRONTEND_URL || "http://localhost:5173",
             );
 
             resetUrl.searchParams.set("token", resetToken);
 
-            await sendPasswordResetEmail(
-                user.email,
-                resetUrl.toString()
-            );
+            try {
+                await sendPasswordResetEmail(
+                    user.email,
+                    resetUrl.toString(),
+                );
+            } catch (emailError) {
+                // Remove the unused token if delivery fails.
+                user.resetPasswordTokenHash = undefined;
+                user.resetPasswordExpiresAt = undefined;
+
+                try {
+                    await user.save();
+                } catch (cleanupError) {
+                    console.error(
+                        "Failed to clean up the unused reset token:",
+                        cleanupError,
+                    );
+                }
+
+                // Log the failure server-side without exposing account details.
+                console.error(
+                    "Password reset email delivery failed:",
+                    emailError,
+                );
+            }
         }
 
         return res.status(200).json({
@@ -151,7 +170,6 @@ export const forgotPassword = async (req, res, next) => {
         return next(error);
     }
 };
-
 
 
 export const resetPassword = async (req, res, next) => {

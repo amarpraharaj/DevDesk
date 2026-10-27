@@ -1289,3 +1289,83 @@ test("POST /api/auth/reset-password changes the password and rejects token reuse
   assert.equal(newLoginResponse.status, 200);
   assert.equal(newLoginResponse.body.success, true);
 });
+
+// Test 1: Registered email gets a generic response even if email delivery fails.
+test("POST /api/auth/forgot-password handles email delivery failure safely", async () => {
+  const email = "forgot-password-test@example.com";
+
+  const registerResponse = await request(app)
+    .post("/api/auth/register")
+    .send({
+      name: "Forgot Password Test User",
+      email,
+      password: "DevDesk@123",
+    });
+
+  assert.equal(registerResponse.status, 201);
+
+  // Ensure this test never sends a real email.
+  const originalApiKey = process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_KEY;
+
+  let response;
+
+  try {
+    response = await request(app)
+      .post("/api/auth/forgot-password")
+      .send({ email });
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.RESEND_API_KEY;
+    } else {
+      process.env.RESEND_API_KEY = originalApiKey;
+    }
+  }
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(
+    response.body.message,
+    "If an account exists with that email, password reset instructions will be sent.",
+  );
+
+  // Failed delivery should clean up the unused reset token.
+  const savedUser = await User.findOne({ email }).select(
+    "+resetPasswordTokenHash +resetPasswordExpiresAt",
+  );
+
+  assert.ok(savedUser);
+  assert.equal(savedUser.resetPasswordTokenHash, undefined);
+  assert.equal(savedUser.resetPasswordExpiresAt, undefined);
+});
+
+
+// Test 2: Unknown email gets the same generic response.
+test("POST /api/auth/forgot-password returns a generic response for an unknown email", async () => {
+  const response = await request(app)
+    .post("/api/auth/forgot-password")
+    .send({
+      email: "unknown-account@example.com",
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.success, true);
+  assert.equal(
+    response.body.message,
+    "If an account exists with that email, password reset instructions will be sent.",
+  );
+});
+
+
+// Test 3: Invalid email is rejected by request validation.
+test("POST /api/auth/forgot-password rejects an invalid email", async () => {
+  const response = await request(app)
+    .post("/api/auth/forgot-password")
+    .send({
+      email: "not-an-email",
+    });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.success, false);
+  assert.equal(response.body.message, "Validation failed.");
+});
