@@ -23,8 +23,12 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "./features/auth/useAuth";
+import DeleteAccountModal from "./components/account/DeleteAccountModal";
 import { apiRequest } from "./lib/api";
-import { forgotPasswordUser, resetPasswordUser } from "./features/auth/auth.api";
+import {
+  forgotPasswordUser,
+  resetPasswordUser,
+} from "./features/auth/auth.api";
 import TicketWorkspace from "./features/tickets/TicketWorkspace";
 import CreateTicketModal from "./components/tickets/CreateTicketModal";
 import EditTicketModal from "./components/tickets/EditTicketModal";
@@ -34,7 +38,11 @@ import { useTicketDeletion } from "./features/tickets/useTicketDeletion";
 import type { Ticket as TicketRecord, TicketStatus } from "./features/tickets/ticket.types";
 
 type Theme = "light" | "dark" | "system";
-type AuthMode = "login" | "register" | "forgot-password" | "reset-password";
+type AuthMode =
+  | "login"
+  | "register"
+  | "forgot-password"
+  | "reset-password";
 
 type ActivityAction =
   | "ticket.created"
@@ -123,6 +131,7 @@ function App() {
     login,
     register,
     logout,
+    deleteAccount,
     clearError,
   } = useAuth();
 
@@ -176,6 +185,9 @@ function App() {
   const [isEditTicketOpen, setIsEditTicketOpen] = useState(false);
   const [isSavingTicket, setIsSavingTicket] = useState(false);
   const [editTicketError, setEditTicketError] = useState<string | null>(null);
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
 
   const ticketDeletion = useTicketDeletion((ticket) => {
     setActionMessage(`Ticket "${ticket.title}" deleted successfully.`);
@@ -330,9 +342,7 @@ useEffect(() => {
 
         setAuthMode("login");
         setPassword("");
-        setFormSuccess(
-          "Account created successfully. Sign in with your new account.",
-        );
+        setFormSuccess("Account created successfully. You can now sign in.");
       } else {
         await login({
           email: normalizedEmail,
@@ -419,6 +429,36 @@ useEffect(() => {
       setActivitiesLoading(false);
     } catch (error) {
       setActionMessage(getErrorMessage(error));
+    }
+  }
+
+  async function handleDeleteAccount(input: {
+    currentPassword: string;
+    confirmation: "DELETE";
+  }) {
+    setIsDeletingAccount(true);
+    setDeleteAccountError(null);
+
+    try {
+      await deleteAccount(input);
+      setIsDeleteAccountOpen(false);
+      setActivePage("Overview");
+      setFormError(null);
+      setFormSuccess("Account deleted successfully.");
+      setName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setTickets([]);
+      setActivities([]);
+      setActivityPagination(null);
+      setTicketUpdateError(null);
+      setEditTicketError(null);
+      setCreateTicketError(null);
+    } catch (error) {
+      setDeleteAccountError(getErrorMessage(error));
+    } finally {
+      setIsDeletingAccount(false);
     }
   }
 
@@ -1360,6 +1400,33 @@ useEffect(() => {
                   </section>
                 </div>
               </div>
+
+              <section className="mt-6 rounded-panel border border-priority-high/40 bg-priority-high/5 p-5 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-priority-high">
+                      Danger Zone
+                    </p>
+                    <h3 className="mt-2 font-semibold text-ink">
+                      Permanently delete your account
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      This permanently deletes your account, your tickets, and
+                      their activity history. This action cannot be undone.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteAccountError(null);
+                      setIsDeleteAccountOpen(true);
+                    }}
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-priority-high/50 px-4 py-2.5 text-sm font-semibold text-priority-high transition-colors hover:bg-priority-high/10 focus-visible:outline-offset-2"
+                  >
+                    Delete account
+                  </button>
+                </div>
+              </section>
             </div>
           ) : activePage === "Activity" ? (
             <section className="overflow-hidden rounded-panel border border-line bg-surface">
@@ -1683,6 +1750,19 @@ useEffect(() => {
           onConfirm={ticketDeletion.confirm}
           isDeleting={ticketDeletion.isDeleting}
           error={ticketDeletion.error}
+        />
+      )}
+      {isDeleteAccountOpen && (
+        <DeleteAccountModal
+          isOpen={isDeleteAccountOpen}
+          isSubmitting={isDeletingAccount}
+          error={deleteAccountError}
+          onClose={() => {
+            if (isDeletingAccount) return;
+            setIsDeleteAccountOpen(false);
+            setDeleteAccountError(null);
+          }}
+          onSubmit={handleDeleteAccount}
         />
       )}
     </div>

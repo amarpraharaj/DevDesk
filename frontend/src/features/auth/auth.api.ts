@@ -43,6 +43,16 @@ type LogoutResponse = {
   message: string
 }
 
+export type DeleteAccountInput = {
+  currentPassword: string
+  confirmation: 'DELETE'
+}
+
+type DeleteAccountResponse = {
+  success: true
+  message: string
+}
+
 export function registerUser(input: RegisterInput) {
   return apiRequest<RegisterResponse>('/auth/register', {
     method: 'POST',
@@ -66,6 +76,13 @@ export function getCurrentUser() {
 export function logoutUser() {
   return apiRequest<LogoutResponse>('/auth/logout', {
     method: 'POST',
+  })
+}
+
+export function deleteAccountUser(input: DeleteAccountInput) {
+  return apiRequest<DeleteAccountResponse>('/auth/me', {
+    method: 'DELETE',
+    body: input,
   })
 }
 

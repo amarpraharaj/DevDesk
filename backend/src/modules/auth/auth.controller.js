@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import mongoose from "mongoose";
 import User from "../users/user.model.js";
+import Ticket from "../tickets/ticket.model.js";
+import Activity from "../activities/activity.model.js";
 import { sendPasswordResetEmail } from "./email.service.js";
 import { randomBytes, createHash } from "node:crypto";
 
@@ -204,5 +207,80 @@ export const resetPassword = async (req, res, next) => {
         });
     } catch (error) {
         return next(error);
+    }
+};
+
+export const deleteAccount = async (req, res, next) => {
+    let session;
+
+    try {
+        const { currentPassword } = req.validatedBody;
+        const user = await User.findById(req.user._id).select("+passwordHash");
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "User account not found.",
+            });
+        }
+
+        const isPasswordValid = await bcrypt.compare(
+            currentPassword,
+            user.passwordHash,
+        );
+
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Current password is incorrect.",
+            });
+        }
+
+        const topology = await mongoose.connection.db.admin().command({
+            hello: 1,
+        });
+
+        if (
+            !topology.setName &&
+            topology.msg !== "isdbgrid" &&
+            !topology.loadBalanced
+        ) {
+            return res.status(503).json({
+                success: false,
+                message:
+                    "Account deletion requires a MongoDB replica set or sharded cluster.",
+            });
+        }
+
+        session = await mongoose.startSession();
+        await session.withTransaction(async () => {
+            await Activity.deleteMany({ user: user._id }, { session });
+            await Ticket.deleteMany({ createdBy: user._id }, { session });
+
+            const result = await User.deleteOne(
+                { _id: user._id },
+                { session },
+            );
+
+            if (result.deletedCount !== 1) {
+                throw new Error("Account deletion did not remove the user.");
+            }
+        });
+
+        res.clearCookie("accessToken", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/",
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Account and associated data deleted successfully.",
+        });
+    } catch (error) {
+        return next(error);
+    } finally {
+        await session?.endSession();
     }
 };

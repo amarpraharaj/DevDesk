@@ -9,10 +9,12 @@ import { ApiError } from '../../lib/api'
 
 import {
   getCurrentUser,
+  deleteAccountUser,
   loginUser,
   logoutUser,
   registerUser,
   type AuthUser,
+  type DeleteAccountInput,
   type LoginInput,
   type RegisterInput,
 } from './auth.api'
@@ -118,6 +120,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null)
   }, [])
 
+  const deleteAccount = useCallback(
+    async (input: DeleteAccountInput): Promise<void> => {
+      await deleteAccountUser(input)
+
+      setUser(null)
+      setError(null)
+    },
+    [],
+  )
+
   const clearError = useCallback(() => {
     setError(null)
   }, [])
@@ -131,6 +143,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         login,
         register,
         logout,
+        deleteAccount,
         refreshUser,
         clearError,
       }}

@@ -8,6 +8,7 @@ import {
     login,
     forgotPassword,
     resetPassword,
+    deleteAccount,
 } from "./auth.controller.js";
 
 import {
@@ -15,6 +16,7 @@ import {
     loginSchema,
     forgotPasswordSchema,
     resetPasswordSchema,
+    deleteAccountSchema,
 } from "./auth.schema.js";
 
 const router = Router();
@@ -45,6 +47,13 @@ router.post(
     "/reset-password",
     validate(resetPasswordSchema),
     resetPassword
+);
+
+router.delete(
+    "/me",
+    authMiddleware,
+    validate(deleteAccountSchema),
+    deleteAccount
 );
 
 // Get current authenticated user

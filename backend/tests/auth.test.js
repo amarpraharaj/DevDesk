@@ -10,7 +10,8 @@ import User from "../src/modules/users/user.model.js";
 import Ticket from "../src/modules/tickets/ticket.model.js";
 import Activity from "../src/modules/activities/activity.model.js";
 
-const TEST_DB_URI = "mongodb://127.0.0.1:27017/devdesk_test";
+const TEST_DB_URI =
+    process.env.TEST_DB_URI || "mongodb://127.0.0.1:27017/devdesk_test";
 
 before(async () => {
     await mongoose.connect(TEST_DB_URI);
@@ -26,7 +27,7 @@ after(async () => {
     if (mongoose.connection.readyState === 1) {
         await User.deleteMany({});
         await Activity.deleteMany({});
-    await Ticket.deleteMany({});
+        await Ticket.deleteMany({});
         await mongoose.disconnect();
     }
 });
@@ -215,6 +216,173 @@ test("GET /api/auth/me returns user details with a valid token", async () => {
     assert.equal(response.body.data.user.name, payload.name);
     assert.equal(response.body.data.user.email, payload.email);
     assert.ok(response.body.data.user.id);
+});
+
+test("DELETE /api/auth/me rejects unauthenticated requests", async () => {
+    const response = await request(app)
+        .delete("/api/auth/me")
+        .send({ currentPassword: "DevDesk@123", confirmation: "DELETE" });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.message, "Authentication required.");
+});
+
+test("DELETE /api/auth/me rejects an incorrect current password", async () => {
+    const agent = request.agent(app);
+    const payload = {
+        name: "Delete Password Test",
+        email: "delete-password-test@example.com",
+        password: "DevDesk@123",
+    };
+
+    await agent.post("/api/auth/register").send(payload);
+    await agent.post("/api/auth/login").send({
+        email: payload.email,
+        password: payload.password,
+    });
+
+    const response = await agent
+        .delete("/api/auth/me")
+        .send({ currentPassword: "WrongPassword@123", confirmation: "DELETE" });
+
+    assert.equal(response.status, 401);
+    assert.equal(response.body.message, "Current password is incorrect.");
+    assert.ok(await User.findOne({ email: payload.email }));
+});
+
+test("DELETE /api/auth/me rejects invalid confirmation without deleting data", async () => {
+    const agent = request.agent(app);
+    const payload = {
+        name: "Delete Confirmation Test",
+        email: "delete-confirmation-test@example.com",
+        password: "DevDesk@123",
+    };
+
+    await agent.post("/api/auth/register").send(payload);
+    await agent.post("/api/auth/login").send({
+        email: payload.email,
+        password: payload.password,
+    });
+
+    const response = await agent
+        .delete("/api/auth/me")
+        .send({ currentPassword: payload.password, confirmation: "delete" });
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.message, "Validation failed.");
+    assert.ok(await User.findOne({ email: payload.email }));
+});
+
+async function supportsTransactions() {
+    const topology = await mongoose.connection.db.admin().command({
+        hello: 1,
+    });
+
+    return Boolean(
+        topology.setName ||
+        topology.msg === "isdbgrid" ||
+        topology.loadBalanced
+    );
+}
+
+test("DELETE /api/auth/me requires transaction support before deleting data", async (t) => {
+    if (await supportsTransactions()) {
+        t.skip("The test database supports transactions.");
+        return;
+    }
+
+    const agent = request.agent(app);
+    const payload = {
+        name: "Standalone Deletion Test",
+        email: "standalone-deletion-test@example.com",
+        password: "DevDesk@123",
+    };
+
+    await agent.post("/api/auth/register").send(payload);
+    await agent.post("/api/auth/login").send({
+        email: payload.email,
+        password: payload.password,
+    });
+    await agent.post("/api/tickets").send({ title: "Keep this ticket" });
+
+    const response = await agent
+        .delete("/api/auth/me")
+        .send({ currentPassword: payload.password, confirmation: "DELETE" });
+
+    assert.equal(response.status, 503);
+    assert.match(response.body.message, /replica set or sharded cluster/);
+    assert.ok(await User.findOne({ email: payload.email }));
+    assert.equal(await Ticket.countDocuments({}), 1);
+    assert.equal(await Activity.countDocuments({}), 1);
+});
+
+test("DELETE /api/auth/me removes only the account's data and invalidates its session", async (t) => {
+    if (!(await supportsTransactions())) {
+      t.skip("Account deletion requires a transaction-capable MongoDB deployment.");
+      return;
+    }
+
+    const agentA = request.agent(app);
+    const agentB = request.agent(app);
+    const userA = {
+        name: "Account Deletion Owner",
+        email: "account-deletion-owner@example.com",
+        password: "DevDesk@123",
+    };
+    const userB = {
+        name: "Unaffected Account",
+        email: "account-deletion-unaffected@example.com",
+        password: "DevDesk@123",
+    };
+
+    const registerA = await agentA.post("/api/auth/register").send(userA);
+    const registerB = await agentB.post("/api/auth/register").send(userB);
+    const userAId = registerA.body.data.user.id;
+    const userBId = registerB.body.data.user.id;
+
+    const loginA = await agentA.post("/api/auth/login").send({
+        email: userA.email,
+        password: userA.password,
+    });
+    await agentB.post("/api/auth/login").send({
+        email: userB.email,
+        password: userB.password,
+    });
+
+    const oldAuthCookie = loginA.headers["set-cookie"]
+        .find((cookie) => cookie.startsWith("accessToken="))
+        .split(";")[0];
+
+    await agentA.post("/api/tickets").send({ title: "Owner ticket" });
+    await agentB.post("/api/tickets").send({ title: "Unaffected ticket" });
+
+    const response = await agentA
+        .delete("/api/auth/me")
+        .send({ currentPassword: userA.password, confirmation: "DELETE" });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.equal(await User.findById(userAId), null);
+    assert.equal(await Ticket.countDocuments({ createdBy: userAId }), 0);
+    assert.equal(await Activity.countDocuments({ user: userAId }), 0);
+    assert.ok(await User.findById(userBId));
+    assert.equal(await Ticket.countDocuments({ createdBy: userBId }), 1);
+    assert.equal(await Activity.countDocuments({ user: userBId }), 1);
+
+    const clearedCookie = response.headers["set-cookie"].find((cookie) =>
+        cookie.startsWith("accessToken="),
+    );
+    assert.ok(clearedCookie);
+    assert.match(clearedCookie, /expires=thu, 01 jan 1970/i);
+
+    const oldSessionResponse = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", oldAuthCookie);
+    assert.equal(oldSessionResponse.status, 401);
+
+    const unaffectedTickets = await agentB.get("/api/tickets");
+    assert.equal(unaffectedTickets.status, 200);
+    assert.equal(unaffectedTickets.body.data.tickets.length, 1);
 });
 
 

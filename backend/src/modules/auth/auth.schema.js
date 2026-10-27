@@ -55,3 +55,13 @@ export const resetPasswordSchema = z.object({
       "Password must contain a special character.",
     ),
 });
+
+export const deleteAccountSchema = z.object({
+  currentPassword: z
+    .string()
+    .min(1, "Current password is required.")
+    .max(72, "Current password is invalid."),
+  confirmation: z
+    .string()
+    .refine((value) => value === "DELETE", "Type DELETE to confirm account deletion."),
+});
