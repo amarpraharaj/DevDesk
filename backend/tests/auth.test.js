@@ -1,5 +1,6 @@
 
 import "dotenv/config";
+import { createHash } from "node:crypto";
 import test, { before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
@@ -1111,4 +1112,180 @@ test("GET /api/tickets rejects invalid query parameters", async () => {
     assert.equal(response.body.success, false);
     assert.equal(response.body.message, "Validation failed.");
   }
+});
+
+// Helper: register a test user and seed a hashed password-reset token.
+async function createUserWithResetToken({
+  email,
+  token,
+  expiresAt,
+  password = "OldPassword@123",
+}) {
+  const registerResponse = await request(app)
+    .post("/api/auth/register")
+    .send({
+      name: "Password Reset Test User",
+      email,
+      password,
+    });
+
+  assert.equal(
+    registerResponse.status,
+    201,
+    `Test user registration failed: ${registerResponse.text}`,
+  );
+
+  const tokenHash = createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const updateResult = await User.updateOne(
+    { email },
+    {
+      $set: {
+        resetPasswordTokenHash: tokenHash,
+        resetPasswordExpiresAt: expiresAt,
+      },
+    },
+  );
+
+  assert.equal(updateResult.matchedCount, 1);
+
+  return { email, token, password };
+}
+
+
+// Test 1: Weak passwords must be rejected.
+test("POST /api/auth/reset-password rejects weak passwords", async () => {
+  const weakPasswords = [
+    "abcdefgh",
+    "HELLO@123",
+    "Hello@abc",
+    "Hello123",
+    "hello@123",
+  ];
+
+  for (const password of weakPasswords) {
+    const response = await request(app)
+      .post("/api/auth/reset-password")
+      .send({
+        token: "unused-test-token",
+        password,
+      });
+
+    assert.equal(
+      response.status,
+      400,
+      `Weak password should be rejected: ${password}`,
+    );
+
+    assert.equal(response.body.success, false);
+    assert.equal(response.body.message, "Validation failed.");
+  }
+});
+
+
+// Test 2: An unknown reset token must be rejected.
+test("POST /api/auth/reset-password rejects an invalid token", async () => {
+  const response = await request(app)
+    .post("/api/auth/reset-password")
+    .send({
+      token: "invalid-reset-token",
+      password: "NewStrong@456",
+    });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.success, false);
+  assert.equal(
+    response.body.message,
+    "Reset token is invalid or has expired.",
+  );
+});
+
+
+// Test 3: An expired reset token must be rejected.
+test("POST /api/auth/reset-password rejects an expired token", async () => {
+  const token = "expired-reset-token";
+
+  await createUserWithResetToken({
+    email: "expired-reset@example.com",
+    token,
+    expiresAt: new Date(Date.now() - 60_000),
+  });
+
+  const response = await request(app)
+    .post("/api/auth/reset-password")
+    .send({
+      token,
+      password: "NewStrong@456",
+    });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.success, false);
+  assert.equal(
+    response.body.message,
+    "Reset token is invalid or has expired.",
+  );
+});
+
+
+// Test 4: A valid reset changes the password and consumes the token.
+test("POST /api/auth/reset-password changes the password and rejects token reuse", async () => {
+  const email = "valid-reset@example.com";
+  const token = "valid-reset-token";
+  const oldPassword = "OldPassword@123";
+  const newPassword = "NewStrong@456";
+
+  await createUserWithResetToken({
+    email,
+    token,
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    password: oldPassword,
+  });
+
+  const resetResponse = await request(app)
+    .post("/api/auth/reset-password")
+    .send({
+      token,
+      password: newPassword,
+    });
+
+  assert.equal(resetResponse.status, 200);
+  assert.equal(resetResponse.body.success, true);
+  assert.equal(
+    resetResponse.body.message,
+    "Password has been reset successfully. Please log in again.",
+  );
+
+  // The same token must not work a second time.
+  const reuseResponse = await request(app)
+    .post("/api/auth/reset-password")
+    .send({
+      token,
+      password: "AnotherStrong@789",
+    });
+
+  assert.equal(reuseResponse.status, 400);
+  assert.equal(reuseResponse.body.success, false);
+
+  // The old password must no longer authenticate.
+  const oldLoginResponse = await request(app)
+    .post("/api/auth/login")
+    .send({
+      email,
+      password: oldPassword,
+    });
+
+  assert.equal(oldLoginResponse.status, 401);
+
+  // The new password must authenticate successfully.
+  const newLoginResponse = await request(app)
+    .post("/api/auth/login")
+    .send({
+      email,
+      password: newPassword,
+    });
+
+  assert.equal(newLoginResponse.status, 200);
+  assert.equal(newLoginResponse.body.success, true);
 });
