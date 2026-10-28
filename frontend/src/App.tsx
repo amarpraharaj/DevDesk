@@ -1293,8 +1293,11 @@ useEffect(() => {
                 </section>
               ) : (
                 <TicketWorkspace
+                  key={activePage}
                   tickets={tickets}
+                  view={activePage === "My tickets" ? "active" : "all"}
                   onCreateTicket={openCreateTicket}
+                  onViewAllTickets={() => setActivePage("All tickets")}
                   onViewActivity={() => setActivePage("Activity")}
                   onEditTicket={openEditTicket}
                   onDeleteTicket={ticketDeletion.open}
