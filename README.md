@@ -201,6 +201,45 @@ All endpoints are prefixed with `/api`. Protected routes require the `accessToke
 
 Ticket list defaults are `page=1`, `limit=10`, `sortBy=createdAt`, and `sortOrder=desc`; the maximum ticket page size is 100. Activity history defaults to `page=1` and `limit=20`, with a maximum page size of 100.
 
+### Example requests
+
+The examples below use PowerShell and `curl.exe`. Login stores the `HttpOnly` `accessToken` cookie in a local cookie jar so subsequent protected requests can use it. Use a disposable account, do not commit the cookie jar, and remove it when finished.
+
+Sign in:
+
+```powershell
+curl.exe -i -c .devdesk-cookies.txt `
+  -H "Content-Type: application/json" `
+  -d '{"email":"you@example.com","password":"replace-with-your-password"}' `
+  https://devdesk-api.onrender.com/api/auth/login
+```
+
+Create a ticket, then request the first page of that user's tickets and activity:
+
+```powershell
+curl.exe -i -b .devdesk-cookies.txt `
+  -H "Content-Type: application/json" `
+  -d '{"title":"Improve ticket search","description":"Match titles and descriptions.","priority":"medium"}' `
+  https://devdesk-api.onrender.com/api/tickets
+
+curl.exe -b .devdesk-cookies.txt `
+  "https://devdesk-api.onrender.com/api/tickets?page=1&limit=5&status=open"
+
+curl.exe -b .devdesk-cookies.txt `
+  "https://devdesk-api.onrender.com/api/activities?page=1&limit=5"
+```
+
+Successful ticket creation returns HTTP `201` with a `data.ticket` object; list and activity requests return HTTP `200` with `data.tickets` or `data.activities` and pagination metadata. Protected routes only return data belonging to the signed-in user.
+
+Account deletion uses `DELETE /api/auth/me` with the current session cookie and this JSON body. It is irreversible, requires a transaction-capable MongoDB deployment, and deletes the account's tickets and activity history:
+
+```json
+{
+  "currentPassword": "your-current-password",
+  "confirmation": "DELETE"
+}
+```
+
 Check the deployed API liveness endpoint (no credentials required):
 
 ```powershell
