@@ -135,6 +135,18 @@ function App() {
     clearError,
   } = useAuth();
 
+  const [isSessionCheckSlow, setIsSessionCheckSlow] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setIsSessionCheckSlow(true);
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading]);
+
   const [theme, setTheme] = useState<Theme>(() => {
     const savedTheme = localStorage.getItem("devdesk-theme");
 
@@ -541,6 +553,11 @@ useEffect(() => {
           </div>
 
           <p className="text-sm text-muted">Loading your workspace…</p>
+          {isSessionCheckSlow && (
+            <p className="max-w-sm text-center text-sm text-muted">
+              Starting your workspace. The first visit may take a little longer.
+            </p>
+          )}
 
           <div className="h-1 w-40 overflow-hidden rounded-full bg-surface-raised">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-accent" />
